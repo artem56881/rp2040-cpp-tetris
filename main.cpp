@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <vector>
+#include <map>
 #include "pico/time.h"
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
@@ -47,6 +48,18 @@ static void btn_init(int pin){
     gpio_set_dir(pin, GPIO_IN);
     gpio_pull_up(pin);
 }
+
+    
+//piece color map
+std::map<int, uint16_t> number_to_color = {
+    {0, 0x4612},
+    {1, 0xD5a9},
+    {2, 0xaa54},
+    {3, 0x8df4},
+    {4, 0x85A6},
+    {5, 0xB1C8},
+    {6, 0x51F4}
+};
 
 class ButtonHandler {
 public:
@@ -351,7 +364,7 @@ static void lock_piece(const Piece& p) {
             if (sh[yy*4 + xx]) {
                 int r = p.y + yy;
                 int c = p.x + xx;
-                if (in_bounds(r,c)) board[r][c] = 1;
+                if (in_bounds(r,c)) board[r][c] = p.t;
             }
 }
 
@@ -416,7 +429,7 @@ static Piece ghost_of(const Piece& p) {
 }
 
 // ===== Rendering =====
-static void draw_cell(int c, int r, bool on) {
+static void draw_cell(int c, int r, int piece_type) {
     int x = FIELD_X + c * CELL_W;
     int y = FIELD_Y + r * CELL_H;
     // cell interior with 1px border gutter
@@ -424,8 +437,7 @@ static void draw_cell(int c, int r, bool on) {
     int h = CELL_H - 1;
     if (w < 1) w = 1;
     if (h < 1) h = 1;
-    ST7735_DrawRectFill(x, y, w + 1, h + 1, PIECE_COLOR);
-    // display.(fb, x, y, w, h, on);
+    ST7735_DrawRectFill(x, y, w + 1, h + 1, number_to_color[piece_type]);
 }
 
 // ghost cell: draw border only (hollow)
@@ -466,17 +478,17 @@ static void draw_field_outline() {
 static void draw_board() {
     for (int r=0;r<ROWS;r++)
         for (int c=0;c<COLS;c++)
-            if (board[r][c]) draw_cell(c, r, PIECE_COLOR);
+            if (board[r][c]) draw_cell(c, r, board[r][c]);
     }
 
-static void draw_piece(const Piece& p, bool on) {
+static void draw_piece(const Piece& p) {
     const uint8_t* sh = TETROMINOES[p.t][p.r];
     for (int yy=0; yy<4; yy++)
         for (int xx=0; xx<4; xx++)
             if (sh[yy*4 + xx]) {
                 int r = p.y + yy;
                 int c = p.x + xx;
-                if (r>=0) draw_cell(c,r,on); 
+                if (r>=0) draw_cell(c, r, p.t); 
             }
 }
 
@@ -501,7 +513,7 @@ static void draw_mini_piece(int t, int x, int y) {
                 int px = x + 1 + xx*MINI;
                 int py = y + 1 + yy*MINI;
                 // tiny filled block
-                ST7735_DrawRectFill(px, py, MINI, MINI, PIECE_COLOR);
+                ST7735_DrawRectFill(px, py, MINI, MINI, number_to_color[t]);
             }
 }
 
@@ -707,7 +719,7 @@ int main() {
         draw_field_outline();
         draw_board();
         draw_ghost(cur);
-        draw_piece(cur, true);
+        draw_piece(cur);
         draw_queue();
         hud_text();
         ST7735_Update();
