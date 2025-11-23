@@ -13,7 +13,7 @@
 #define PIN_LCD_CS     5   // Chip Select
 #define PIN_LCD_DC     7   // Data/Command
 #define PIN_LCD_RST    6   // Reset
-#define PIN_LCD_BL     4   // Backlight (опционально)
+#define PIN_LCD_BL     4   // Backlight (optional)
 
 #define ST7735_MADCTL_MY  0x80
 #define ST7735_MADCTL_MX  0x40
