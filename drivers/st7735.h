@@ -8,13 +8,12 @@
 #include "hardware/spi.h"
 #include "fonts.h"
 
-// Конфигурация пинов (измените под вашу схему подключения)
 #define PIN_LCD_DIN    3   // MOSI (SPI TX)
 #define PIN_LCD_CLK    2   // SCK (SPI CLK)
 #define PIN_LCD_CS     5   // Chip Select
 #define PIN_LCD_DC     7   // Data/Command
 #define PIN_LCD_RST    6   // Reset
-#define PIN_LCD_BL     4   // Backlight (опционально)
+#define PIN_LCD_BL     4   // Backlight (optional)
 
 #define ST7735_MADCTL_MY  0x80
 #define ST7735_MADCTL_MX  0x40

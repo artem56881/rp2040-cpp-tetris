@@ -253,15 +253,11 @@ void ST7735_Init(void)
 
     gpio_put(PIN_LCD_CS, 1);
 
-    // initialize framebuffer to black
     ST7735_FillBuffer(0x0000);
-    // default rotation already set by constants; set _width/_height accordingly
     _rotation = 1;
     _width = ST7735_HEIGHT;
     _height = ST7735_WIDTH;
 }
-
-// NOTE: drawing functions now only modify framebuffer
 
 void ST7735_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 {
@@ -270,7 +266,6 @@ void ST7735_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 
 void ST7735_FillScreen(uint16_t color)
 {
-    // logical fill: fill only logical area (_width x _height)
     for (int16_t y = 0; y < _height; ++y)
         for (int16_t x = 0; x < _width; ++x)
             fb_set_pixel(x, y, color);
@@ -307,7 +302,6 @@ void ST7735_DrawString(uint16_t x, uint16_t y, const char *str, FontDef font, ui
 
             if (*str == ' ')
             {
-                // skip spaces in the beginning of the new line
                 str++;
                 continue;
             }
@@ -485,7 +479,7 @@ void ST7735_DrawRectRound(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r,
     ST7735_DrawFastHLine(x + r, y + h - 1, w - r - r, color); // Bottom
     ST7735_DrawFastVLine(x, y + r, h - r - r, color);         // Left
     ST7735_DrawFastVLine(x + w - 1, y + r, h - r - r, color); // Right
-    // draw four corners
+
     ST7735_DrawCircleHelper(x + r, y + r, r, 1, color);
     ST7735_DrawCircleHelper(x + r, y + h - r - 1, r, 8, color);
     ST7735_DrawCircleHelper(x + w - r - 1, y + r, r, 2, color);
@@ -496,7 +490,6 @@ void ST7735_DrawRectRoundFill(int16_t x, int16_t y, int16_t w, int16_t h, int16_
 {
     ST7735_DrawRectFill(x + r, y, w - r - r, h, color);
 
-    // draw four corners
     ST7735_FillCircleHelper(x + w - r - 1, y + r, r, 1, h - r - r - 1, color);
     ST7735_FillCircleHelper(x + r, y + r, r, 2, h - r - r - 1, color);
 }
@@ -512,7 +505,6 @@ void ST7735_DrawTriangleFill(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int
 {
     int16_t a, b, y, last;
 
-    // Sort coordinates by Y order (y2 >= y1 >= y0)
     if (y0 > y1)
     {
         SWAP_INT16_T(y0, y1);
@@ -532,7 +524,7 @@ void ST7735_DrawTriangleFill(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int
     }
 
     if (y0 == y2)
-    { // Handle awkward all-on-same-line case as its own thing
+    {
         a = b = x0;
         if (x1 < a)
             a = x1;
@@ -550,9 +542,9 @@ void ST7735_DrawTriangleFill(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int
             dx12 = x2 - x1, dy12 = y2 - y1, sa = 0, sb = 0;
 
     if (y1 == y2)
-        last = y1; // Include y1 scanline
+        last = y1;
     else
-        last = y1 - 1; // Skip it
+        last = y1 - 1;
 
     for (y = y0; y <= last; y++)
     {
@@ -613,7 +605,7 @@ uint8_t data[] = {
     int16_t err = dx / 2;
     int8_t ystep = (y0 < y1) ? 1 : (-1);
 
-    if (steep) // y increments every iteration (y0 is x-axis, and x0 is y-axis)
+    if (steep)
     {
         if (x1 >= _height)
             x1 = _height - 1;
@@ -647,7 +639,7 @@ uint8_t data[] = {
             }
         }
     }
-    else // x increments every iteration (x0 is x-axis, and y0 is y-axis)
+    else
     {
         if (x1 >= _width)
             x1 = _width - 1;
@@ -799,7 +791,6 @@ void ST7735_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint
     {
         for (uint16_t xx = 0; xx < w; ++xx)
         {
-            // data is an array of uint16_t in native host order; keep as-is
             uint16_t color = data[yy * w + xx];
             ST7735_DrawPixel(x + xx, y + yy, color);
         }
@@ -821,15 +812,11 @@ void ST7735_InvertColors(bool invert)
     ST7735_WriteCommand(invert ? ST7735_INVON : ST7735_INVOFF);
 }
 
-// ---------- Buffer -> Display: call this to actually send framebuffer to panel ----------
-
+// send buffer to display
 void ST7735_Update()
 {
-    // Set the address window to cover the full physical panel
     ST7735_SetAddressWindow(0, 0, FB_WIDTH - 1, FB_HEIGHT - 1);
 
-    // We'll send one row at a time as bytes MSB-first per pixel
-    // temporary row buffer (FB_WIDTH * 2 bytes)
     uint8_t rowbuf[FB_WIDTH * 2];
 
     gpio_put(PIN_LCD_CS, 0);
@@ -837,7 +824,6 @@ void ST7735_Update()
 
     for (int py = 0; py < FB_HEIGHT; ++py)
     {
-        // build row (MSB first per pixel)
         for (int px = 0; px < FB_WIDTH; ++px)
         {
             uint16_t c = framebuffer[py * FB_WIDTH + px];
@@ -850,11 +836,9 @@ void ST7735_Update()
     gpio_put(PIN_LCD_CS, 1);
 }
 
-// ---------- helpers: clear logical area ----------
 
 void ST7735_Clear()
 {
     ST7735_FillScreen(0x0000);
 }
 
-// End of file

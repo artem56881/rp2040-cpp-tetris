@@ -1,18 +1,4 @@
-/**
- * RP2040 Tetris (Portrait 128x64, 10x20, SRS, 7-bag, DAS/ARR, Ghost, Lock Delay)
- *
- * - Uses your SH1106/SH1107 I2C OLED driver (extern "C" prototypes below).
- * - Keep your driver in a separate file you include/compile (e.g. ssd1306_i2c.cpp).
- * - Buttons (active LOW):
- *      LEFT=27, RIGHT=15, ROT=14, SDROP=26, HDROP=28, PAUSE=29
- *
- * Coordinate system:
- *   Display HW buffer is landscape 128x64. Game renders in portrait 64x128 using a
- *   pixel mapper: (xp,yp) -> (xl,yl) = (yp, 63 - xp).
- */
- 
- // TODO hold piece, attaca text(single, double quad...(tspin?))
- 
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -27,7 +13,6 @@
 #include <hardware/clocks.h>
 #include "images.h"
 
-// ===== Buttons (active LOW) =====
 #define PIN_LEFT   10
 #define PIN_RIGHT  8
 #define PIN_ROT    13
@@ -36,8 +21,8 @@
 #define PIN_PAUSE  15
 #define PIN_ROT_CCW  11
 
-#define DAS_MS 142   // Delay before auto-repeat starts (in ms)
-#define ARR_MS 1    // Auto-repeat rate (in ms)
+#define DAS_MS 142
+#define ARR_MS 1
 
 #define PIECE_COLOR ST7735_WHITE
 #define FIELD_COLOR ST7735_YELLOW
@@ -49,8 +34,6 @@ static void btn_init(int pin){
     gpio_pull_up(pin);
 }
 
-    
-//piece color map
 std::map<int, uint16_t> number_to_color = {
     {0, 0x1F << 11 | 0x3F << 5 | 0x1F},
     {1, 0xD5a9},
@@ -69,7 +52,7 @@ public:
     {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_IN);
-        gpio_pull_up(pin); // assuming button pulls pin to GND when pressed
+        gpio_pull_up(pin);
     }
 
     void update() {
@@ -82,14 +65,14 @@ public:
             pressedTime = now;
             lastRepeatTime = now;
             repeating = false;
-            callback(); // Immediate call on press
+            callback();
         }
         else if (isPressed && state) {
             // Button is being held
             if (!repeating && (now - pressedTime >= DAS_MS)) {
                 repeating = true;
                 lastRepeatTime = now;
-                callback(); // First repeat after DAS
+                callback();
             }
             else if (repeating && (now - lastRepeatTime >= ARR_MS)) {
                 lastRepeatTime = now;
@@ -112,16 +95,14 @@ private:
     void (*callback)();
 
     uint64_t millis() {
-        return time_us_64() / 1000; // convert microseconds to milliseconds
+        return time_us_64() / 1000;
     }
 
     bool readButton() {
-        // Active low: pressed when pin reads 0
         return gpio_get(pin) == 0;
     }
 };
 
-// ==== FPS variables ====
 uint32_t fps_counter = 0;
 uint32_t fps_value = 0;
 absolute_time_t fps_timer;
@@ -134,42 +115,34 @@ void update_fps() {
         fps_timer = get_absolute_time();
     }
 }
-// ===== Framebuffer =====
 
-// ===== Game config =====
-// Keep original 10x20, small cells to fit portrait 64x128.
-#define ghost_lines 1 // to make piece appear out of bounds when spawning.
+#define ghost_lines 1
 static const int CELL_W = 6;   // px
 static const int CELL_H = 6;   // px
 static const int COLS   = 10;
 static const int ROWS   = 20 + ghost_lines;
 
-static const int FIELD_W = COLS * CELL_W; // 50 px
-static const int FIELD_H = (ROWS - ghost_lines) * CELL_H; // 60 px
+static const int FIELD_W = COLS * CELL_W;
+static const int FIELD_H = (ROWS - ghost_lines) * CELL_H;
 
-// Layout (portrait)
 static const int FIELD_X = 2;                        // left margin
-static const int FIELD_Y = (128 - FIELD_H-10)/2;        // vertical center (34)
+static const int FIELD_Y = (128 - FIELD_H-10)/2;        // vertical offset
 static const int PANEL_X = FIELD_X + FIELD_W + 4;    // 56
 static const int PANEL_W = 64 - PANEL_X - 2;         // ~6
 static const int PANEL_Y = FIELD_Y;
 static const int PANEL_H = FIELD_H;
 
-// Next queue mini rendering
-static const int MINI = 4;                 // mini block
-static const int PREV_BOX_W = 4*MINI + 2;  // fits 4 columns
+static const int MINI = 4;
+static const int PREV_BOX_W = 4*MINI + 2;
 static const int PREV_BOX_H = 4*MINI + 2;
 static const int PREV_SPACING = 4;         // vertical spacing between previews
 static const int NEXT_SHOW = 4;            // show 4 next pieces
 
-// DAS / ARR / Gravity / Lock delay
 static const int SOFT_DROP_MS  = 1;   // soft drop tick
 static const int LOCK_DELAY_MS = 500;  // lock delay when grounded
 
-// ===== Board & pieces =====
 static uint8_t board[ROWS][COLS];
 
-// Tetromino shapes: 7 × 4 rotations × 4×4 grid (bit 0/1)
 static const uint8_t TETROMINOES[7][4][16] = {
     // I
     {
@@ -233,14 +206,14 @@ struct Piece {
 
 static Piece cur;
 static Piece holded;
-static std::vector<int> bag;         // 7-bag
-static std::vector<int> next_queue;  // upcoming pieces (show 4)
+static std::vector<int> bag;
+static std::vector<int> next_queue;
 static bool paused = false;
 static int score = 0;
 static int lines_cleared = 0;
 static int level = 1;
 
-// ===== RNG & 7-bag =====
+// RNG & 7-bag 
 static uint32_t rng_state = 0x12345678;
 static inline uint32_t xorshift32() {
     uint32_t x = rng_state;
@@ -269,8 +242,7 @@ static void ensure_next_queue(int n) {
     }
 }
 
-// ===== SRS wall kicks =====
-// JLSTZ (r->r'): 5 tests
+// wall kicks
 static const int8_t SRS_JLSTZ[4][5][2] = {
     // 0->1
     { { 0, 0}, {-1, 0}, {-1,+1}, { 0,-2}, {-1,-2} },
@@ -281,7 +253,7 @@ static const int8_t SRS_JLSTZ[4][5][2] = {
     // 3->0
     { { 0, 0}, {-1, 0}, {-1,-1}, { 0,+2}, {-1,+2} }
 };
-// I piece
+
 static const int8_t SRS_I[4][5][2] = {
     // 0->1
     { { 0, 0}, {-2, 0}, {+1, 0}, {-2,-1}, {+1,+2} },
@@ -292,7 +264,7 @@ static const int8_t SRS_I[4][5][2] = {
     // 3->0
     { { 0, 0}, {+1, 0}, {-2, 0}, {+1,-2}, {-2,+1} }
 };
-// O piece: no kicks
+
 static const int8_t SRS_O[4][1][2] = {
     { {0,0} }, { {0,0} }, { {0,0} }, { {0,0} }
 };
@@ -315,7 +287,7 @@ static bool can_place(const Piece& p) {
 
             if (r < 0) {
                 if (c < 0 || c >= COLS) return false;
-                continue; // ok: allow being above top
+                continue;
             }
 
             if (c < 0 || c >= COLS || r >= ROWS) return false;
@@ -329,7 +301,7 @@ static inline bool btn_down(int pin) {
     return gpio_get(pin) == 0;
 }
 
-static bool try_rotate_srs(Piece &pc, int dir) { // +1 CW, -1 CCW (we use CW)
+static bool try_rotate_srs(Piece &pc, int dir) {
     int from = pc.r;
     int to   = (pc.r + (dir>0?1:3)) & 3;
     Piece test = pc; test.r = to;
@@ -390,7 +362,7 @@ static void new_piece_from_queue() {
     cur.t = next_queue.front();
     next_queue.erase(next_queue.begin());
     cur.r = 0;
-    cur.x = (COLS/2) - 2; // spawn near center
+    cur.x = (COLS/2) - 2;
     cur.y = 0;
     ensure_next_queue(7);
     // game over check
@@ -418,7 +390,6 @@ void move_right() {
     }
 }
 
-// ===== Ghost piece =====
 static Piece ghost_of(const Piece& p) {
     Piece g = p;
     while (true) {
@@ -428,11 +399,9 @@ static Piece ghost_of(const Piece& p) {
     return g;
 }
 
-// ===== Rendering =====
 static void draw_cell(int c, int r, int piece_type) {
     int x = FIELD_X + c * CELL_W;
     int y = FIELD_Y + r * CELL_H;
-    // cell interior with 1px border gutter
     int w = CELL_W - 1;
     int h = CELL_H - 1;
     if (w < 1) w = 1;
@@ -440,35 +409,24 @@ static void draw_cell(int c, int r, int piece_type) {
     ST7735_DrawRectFill(x, y, w + 1, h + 1, number_to_color[piece_type]);
 }
 
-// ghost cell: draw border only (hollow)
 static void draw_cell_ghost(int c, int r) {
     int x = FIELD_X + c * CELL_W;
     int y = FIELD_Y + r * CELL_H;
     int w = CELL_W - 1; if (w < 1) w = 1;
     int h = CELL_H - 1; if (h < 1) h = 1;
 
-    // Top & Bottom
     for (int xx=0; xx<w; xx++) {
         ST7735_DrawPixel(x + xx, y, PIECE_COLOR);
         ST7735_DrawPixel(x + xx, y+h-1, PIECE_COLOR);
-        // display.setPixel(x+xx, y);
-        // display.setPixel(x+xx, y+h-1);
     }
-    // Left & Right
     for (int yy=0; yy<h; yy++) {
         ST7735_DrawPixel(x, y + yy, PIECE_COLOR);
         ST7735_DrawPixel(x + w - 1, y+yy, PIECE_COLOR);
-        // display.setPixel(x, y+yy);
-        // display.setPixel(x+w-1, y+yy);
     }
-    // SetPixelPortrait(fb, x, y, true); // corner pixels
-    // SetPixelPortrait(fb, x+w, y, true);
-    // SetPixelPortrait(fb, x, y+h, true);
-    // SetPixelPortrait(fb, x+w, y+h, true);
+
 }
 
 static void draw_field_outline() {
-    // border
     ST7735_DrawRectFill(FIELD_X-1, FIELD_Y-1 + ghost_lines * CELL_W, FIELD_W+2, 1, FIELD_COLOR);
     ST7735_DrawRectFill(FIELD_X-1, FIELD_Y+FIELD_H + ghost_lines * CELL_W, FIELD_W+2, 1, FIELD_COLOR);
     ST7735_DrawRectFill(FIELD_X-1, FIELD_Y+ ghost_lines * CELL_W, 1, FIELD_H, FIELD_COLOR);
@@ -504,7 +462,6 @@ static void draw_ghost(const Piece& p) {
             }
 }
 
-// mini piece in previews
 static void draw_mini_piece(int t, int x, int y) {
     const uint8_t* sh = TETROMINOES[t][0];
     for (int yy=0; yy<4; yy++)
@@ -512,17 +469,8 @@ static void draw_mini_piece(int t, int x, int y) {
             if (sh[yy*4 + xx]) {
                 int px = x + 1 + xx*MINI;
                 int py = y + 1 + yy*MINI;
-                // tiny filled block
                 ST7735_DrawRectFill(px, py, MINI, MINI, number_to_color[t]);
             }
-}
-
-static void draw_hold(){
-    // simple column border
-    // FillRect(fb, PANEL_X-1, PANEL_Y-1, PANEL_W+2, 1, true);
-    // FillRect(fb, PANEL_X-1, PANEL_Y+PANEL_H, PANEL_W+2, 1, true);
-    // FillRect(fb, PANEL_X-1, PANEL_Y, 1, PANEL_H, true);
-    // FillRect(fb, PANEL_X+PANEL_W, PANEL_Y, 1, PANEL_H, true);
 }
 
 static void draw_queue() {
@@ -534,22 +482,12 @@ static void draw_queue() {
     }
 }
 
-// HUD (uses landscape WriteString at top-left)
-static void hud_text() {
-    char s[28];
-    snprintf(s, sizeof(s), "L%d S%d", level, score);
-    // WriteString(fb, 0, 0, s); govno
-}
-
-// ===== Gravity & Lock delay =====
 static absolute_time_t last_fall;
 static absolute_time_t last_softdrop;
 static bool was_grounded = false;
 static absolute_time_t grounded_time;
 
-// return fall interval by level (ms)
 static int gravity_interval_ms() {
-    // simple curve, faster each few levels
     if (level < 2)  return 700;
     if (level < 4)  return 500;
     if (level < 6)  return 380;
@@ -579,7 +517,6 @@ static void on_piece_locked() {
     was_grounded = false;
 }
 
-// attempt to move down (gravity tick)
 static void tick_fall() {
     Piece t = cur; t.y++;
     if (can_place(t)) {
@@ -587,12 +524,10 @@ static void tick_fall() {
         was_grounded = false;
         score++;
     } else {
-        // grounded
         if (!was_grounded) {
             was_grounded = true;
             grounded_time = get_absolute_time();
         } else {
-            // check lock delay
             if (absolute_time_diff_us(grounded_time, get_absolute_time()) >= (int64_t)LOCK_DELAY_MS*1000) {
                 on_piece_locked();
             }
@@ -600,7 +535,6 @@ static void tick_fall() {
     }
 }
 
-// movement resets lock delay if grounded
 static void reset_lock_if_grounded_changed(bool moved_or_rotated) {
     if (moved_or_rotated && grounded(cur)) {
         grounded_time = get_absolute_time();
@@ -608,7 +542,6 @@ static void reset_lock_if_grounded_changed(bool moved_or_rotated) {
     }
 }
 
-// ===== Main =====
 int main() {
     set_sys_clock_khz(100000, true);
     holded.t = -1;
@@ -617,7 +550,6 @@ int main() {
     ST7735_Init();
     ST7735_FillScreen(ST7735_BLACK);
     
-    // Buttons
     btn_init(PIN_ROT);
     btn_init(PIN_ROT_CCW);
     btn_init(PIN_SDROP);
@@ -627,10 +559,8 @@ int main() {
     ButtonHandler btn_L(PIN_LEFT, move_left);
     ButtonHandler btn_R(PIN_RIGHT, move_right);
 
-    // Seed RNG
     rng_state ^= (uint32_t)time_us_64();
 
-    // Init game
     memset(board, 0, sizeof(board));
     bag.clear(); next_queue.clear();
     ensure_next_queue(7);
@@ -641,17 +571,14 @@ int main() {
 
     while (true) {
         update_fps();
-        // Pause toggle
         static bool prev_pause = false;
         bool p_pause = btn_down(PIN_PAUSE);
         if (p_pause && !prev_pause) paused = !paused;
         prev_pause = p_pause;
 
         if (!paused) {
-            // Horizontal with DAS/ARR
             btn_R.update();
             btn_L.update();
-            // Rotation (CW) — single edge
             static bool prev_rot = false;
             bool rot = btn_down(PIN_ROT);
             bool rot_ccw = btn_down(PIN_ROT_CCW);
@@ -663,14 +590,12 @@ int main() {
                 if (try_rotate_srs(cur, dir)) {
                     reset_lock_if_grounded_changed(true);
                 } else {
-                    // failed rotation doesn't reset lock delay
                     cur = before;
                 }
             }
             if (rot) prev_rot = rot;
             else prev_rot = rot_ccw;
 
-            // Soft drop: faster tick while held
             bool sdrop = btn_down(PIN_SDROP);
             if (sdrop) {
                 if (absolute_time_diff_us(last_softdrop, get_absolute_time()) >= (int64_t)SOFT_DROP_MS*10) {
@@ -679,9 +604,8 @@ int main() {
                     if (can_place(t)) {
                         cur = t;
                         was_grounded = false;
-                        score += 1; // small soft-drop point
+                        score += 1;
                     } else {
-                        // same as gravity: start/continue lock delay
                         if (!was_grounded) {
                             was_grounded = true;
                             grounded_time = get_absolute_time();
@@ -692,13 +616,10 @@ int main() {
                 }
             }
 
-            // Hard drop: edge
             static bool prev_hard = false;
             bool hdrop = btn_down(PIN_HDROP);
             if (hdrop && !prev_hard) {
-                // drop to ghost
                 Piece g = ghost_of(cur);
-                // add points per cell dropped
                 int dy = g.y - cur.y;
                 if (dy > 0) score += 2*dy;
                 cur = g;
@@ -706,7 +627,6 @@ int main() {
             }
             prev_hard = hdrop;
 
-            // Gravity
             int fall_ms = gravity_interval_ms();
             if (absolute_time_diff_us(last_fall, get_absolute_time()) >= (int64_t)fall_ms*1000) {
                 last_fall = get_absolute_time();
@@ -716,13 +636,11 @@ int main() {
         
         // Render
         ST7735_DrawImage(0, 0, 160, 128, cat_farmer);
-        // ST7735_DrawRectFill(0, 0, 128, 160, ST7735_YELLOW);
         draw_field_outline();
         draw_board();
         draw_ghost(cur);
         draw_piece(cur);
         draw_queue();
-        hud_text();
         ST7735_Update();
 
     }
