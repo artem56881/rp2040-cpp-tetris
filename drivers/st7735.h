@@ -8,6 +8,7 @@
 #include "hardware/spi.h"
 #include "fonts.h"
 
+// Конфигурация пинов (измените под вашу схему подключения)
 #define PIN_LCD_DIN    3   // MOSI (SPI TX)
 #define PIN_LCD_CLK    2   // SCK (SPI CLK)
 #define PIN_LCD_CS     5   // Chip Select
