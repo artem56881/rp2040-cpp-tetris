@@ -1,17 +1,8 @@
 /**
- * RP2040 Tetris (Portrait 128x64, 10x20, SRS, 7-bag, DAS/ARR, Ghost, Lock Delay)
- *
- * - Uses your SH1106/SH1107 I2C OLED driver (extern "C" prototypes below).
- * - Keep your driver in a separate file you include/compile (e.g. ssd1306_i2c.cpp).
- * - Buttons (active LOW):
- *      LEFT=27, RIGHT=15, ROT=14, SDROP=26, HDROP=28, PAUSE=29
- *
- * Coordinate system:
- *   Display HW buffer is landscape 128x64. Game renders in portrait 64x128 using a
- *   pixel mapper: (xp,yp) -> (xl,yl) = (yp, 63 - xp).
+Tetris game code
  */
  
- // TODO hold piece, attaca text(single, double quad...(tspin?))
+ // TODO hold piece, attack text(single, double quad...(tspin?))
  
 #include <stdio.h>
 #include <string.h>
@@ -28,13 +19,13 @@
 #include "images.h"
 
 // ===== Buttons (active LOW) =====
-#define PIN_LEFT   27
-#define PIN_RIGHT  15
-#define PIN_ROT    14
-#define PIN_SDROP  26
-#define PIN_HDROP  28
-#define PIN_PAUSE  23
-#define PIN_ROT_CCW  29
+#define PIN_LEFT   10
+#define PIN_RIGHT  8
+#define PIN_ROT    13
+#define PIN_SDROP  12
+#define PIN_HDROP  17
+#define PIN_PAUSE  15
+#define PIN_ROT_CCW  11
 
 #define DAS_MS 142   // Delay before auto-repeat starts (in ms)
 #define ARR_MS 1    // Auto-repeat rate (in ms)
@@ -69,7 +60,7 @@ public:
     {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_IN);
-        gpio_pull_up(pin); // assuming button pulls pin to GND when pressed
+        gpio_pull_up(pin);
     }
 
     void update() {
@@ -116,7 +107,6 @@ private:
     }
 
     bool readButton() {
-        // Active low: pressed when pin reads 0
         return gpio_get(pin) == 0;
     }
 };
@@ -134,10 +124,7 @@ void update_fps() {
         fps_timer = get_absolute_time();
     }
 }
-// ===== Framebuffer =====
 
-// ===== Game config =====
-// Keep original 10x20, small cells to fit portrait 64x128.
 #define ghost_lines 2 // to make piece appear out of bounds when spawning.
 static const int CELL_W = 7;   // px
 static const int CELL_H = 7;   // px
@@ -147,29 +134,24 @@ static const int ROWS   = 20 + ghost_lines;
 static const int FIELD_W = COLS * CELL_W; // 50 px
 static const int FIELD_H = (ROWS - ghost_lines) * CELL_H; // 60 px
 
-// Layout (portrait)
 static const int FIELD_X = 2;                        // left margin
-static const int FIELD_Y = (128 - FIELD_H)/2;        // vertical center (34)
+static const int FIELD_Y = (128 - FIELD_H)/2;        // vertical center
 static const int PANEL_X = FIELD_X + FIELD_W + 4;    // 56
 static const int PANEL_W = 64 - PANEL_X - 2;         // ~6
 static const int PANEL_Y = FIELD_Y;
 static const int PANEL_H = FIELD_H;
 
-// Next queue mini rendering
 static const int MINI = 7;                 // mini block
 static const int PREV_BOX_W = 4*MINI + 2;  // fits 4 columns
 static const int PREV_BOX_H = 4*MINI + 2;
 static const int PREV_SPACING = 4;         // vertical spacing between previews
 static const int NEXT_SHOW = 4;            // show 4 next pieces
 
-// DAS / ARR / Gravity / Lock delay
 static const int SOFT_DROP_MS  = 1;   // soft drop tick
 static const int LOCK_DELAY_MS = 500;  // lock delay when grounded
 
-// ===== Board & pieces =====
 static uint8_t board[ROWS][COLS];
 
-// Tetromino shapes: 7 × 4 rotations × 4×4 grid (bit 0/1)
 static const uint8_t TETROMINOES[7][4][16] = {
     // I
     {
@@ -240,7 +222,6 @@ static int score = 0;
 static int lines_cleared = 0;
 static int level = 1;
 
-// ===== RNG & 7-bag =====
 static uint32_t rng_state = 0x12345678;
 static inline uint32_t xorshift32() {
     uint32_t x = rng_state;
@@ -269,8 +250,7 @@ static void ensure_next_queue(int n) {
     }
 }
 
-// ===== SRS wall kicks =====
-// JLSTZ (r->r'): 5 tests
+// ===== wall kicks =====
 static const int8_t SRS_JLSTZ[4][5][2] = {
     // 0->1
     { { 0, 0}, {-1, 0}, {-1,+1}, { 0,-2}, {-1,-2} },
@@ -390,7 +370,7 @@ static void new_piece_from_queue() {
     cur.t = next_queue.front();
     next_queue.erase(next_queue.begin());
     cur.r = 0;
-    cur.x = (COLS/2) - 2; // spawn near center
+    cur.x = (COLS/2) - 2;
     cur.y = 0;
     ensure_next_queue(7);
     // game over check
@@ -418,7 +398,6 @@ void move_right() {
     }
 }
 
-// ===== Ghost piece =====
 static Piece ghost_of(const Piece& p) {
     Piece g = p;
     while (true) {
@@ -428,11 +407,10 @@ static Piece ghost_of(const Piece& p) {
     return g;
 }
 
-// ===== Rendering =====
 static void draw_cell(int c, int r, int piece_type) {
     int x = FIELD_X + c * CELL_W;
     int y = FIELD_Y + r * CELL_H;
-    // cell interior with 1px border gutter
+
     int w = CELL_W - 1;
     int h = CELL_H - 1;
     if (w < 1) w = 1;
@@ -440,35 +418,25 @@ static void draw_cell(int c, int r, int piece_type) {
     ST7735_DrawRectFill(x, y, w + 1, h + 1, number_to_color[piece_type]);
 }
 
-// ghost cell: draw border only (hollow)
 static void draw_cell_ghost(int c, int r) {
     int x = FIELD_X + c * CELL_W;
     int y = FIELD_Y + r * CELL_H;
     int w = CELL_W - 1; if (w < 1) w = 1;
     int h = CELL_H - 1; if (h < 1) h = 1;
 
-    // Top & Bottom
     for (int xx=0; xx<w; xx++) {
         ST7735_DrawPixel(x + xx, y, PIECE_COLOR);
         ST7735_DrawPixel(x + xx, y+h-1, PIECE_COLOR);
-        // display.setPixel(x+xx, y);
-        // display.setPixel(x+xx, y+h-1);
     }
-    // Left & Right
     for (int yy=0; yy<h; yy++) {
         ST7735_DrawPixel(x, y + yy, PIECE_COLOR);
         ST7735_DrawPixel(x + w - 1, y+yy, PIECE_COLOR);
-        // display.setPixel(x, y+yy);
-        // display.setPixel(x+w-1, y+yy);
+
     }
-    // SetPixelPortrait(fb, x, y, true); // corner pixels
-    // SetPixelPortrait(fb, x+w, y, true);
-    // SetPixelPortrait(fb, x, y+h, true);
-    // SetPixelPortrait(fb, x+w, y+h, true);
+
 }
 
 static void draw_field_outline() {
-    // border
     ST7735_DrawRectFill(FIELD_X-1, FIELD_Y-1 + ghost_lines * CELL_W, FIELD_W+2, 1, FIELD_COLOR);
     ST7735_DrawRectFill(FIELD_X-1, FIELD_Y+FIELD_H + ghost_lines * CELL_W, FIELD_W+2, 1, FIELD_COLOR);
     ST7735_DrawRectFill(FIELD_X-1, FIELD_Y+ ghost_lines * CELL_W, 1, FIELD_H, FIELD_COLOR);
@@ -504,7 +472,6 @@ static void draw_ghost(const Piece& p) {
             }
 }
 
-// mini piece in previews
 static void draw_mini_piece(int t, int x, int y) {
     const uint8_t* sh = TETROMINOES[t][0];
     for (int yy=0; yy<4; yy++)
@@ -517,14 +484,6 @@ static void draw_mini_piece(int t, int x, int y) {
             }
 }
 
-static void draw_hold(){
-    // simple column border
-    // FillRect(fb, PANEL_X-1, PANEL_Y-1, PANEL_W+2, 1, true);
-    // FillRect(fb, PANEL_X-1, PANEL_Y+PANEL_H, PANEL_W+2, 1, true);
-    // FillRect(fb, PANEL_X-1, PANEL_Y, 1, PANEL_H, true);
-    // FillRect(fb, PANEL_X+PANEL_W, PANEL_Y, 1, PANEL_H, true);
-}
-
 static void draw_queue() {
     int y = PANEL_Y + 2 + ghost_lines * CELL_W;
     for (int i=0; i<NEXT_SHOW && i<(int)next_queue.size(); i++) {
@@ -534,14 +493,7 @@ static void draw_queue() {
     }
 }
 
-// HUD (uses landscape WriteString at top-left)
-static void hud_text() {
-    char s[28];
-    snprintf(s, sizeof(s), "L%d S%d", level, score);
-    // WriteString(fb, 0, 0, s); govno
-}
-
-// ===== Gravity & Lock delay =====
+// Gravity & Lock delay
 static absolute_time_t last_fall;
 static absolute_time_t last_softdrop;
 static bool was_grounded = false;
@@ -610,7 +562,7 @@ static void reset_lock_if_grounded_changed(bool moved_or_rotated) {
 
 // ===== Main =====
 int main() {
-    set_sys_clock_khz(100000, true);
+    set_sys_clock_khz(100000, true); // under-clock the mcu
     holded.t = -1;
     stdio_init_all();
 
@@ -627,7 +579,6 @@ int main() {
     ButtonHandler btn_L(PIN_LEFT, move_left);
     ButtonHandler btn_R(PIN_RIGHT, move_right);
 
-    // Seed RNG
     rng_state ^= (uint32_t)time_us_64();
 
     // Init game
@@ -648,10 +599,8 @@ int main() {
         prev_pause = p_pause;
 
         if (!paused) {
-            // Horizontal with DAS/ARR
             btn_R.update();
             btn_L.update();
-            // Rotation (CW) — single edge
             static bool prev_rot = false;
             bool rot = btn_down(PIN_ROT);
             bool rot_ccw = btn_down(PIN_ROT_CCW);
@@ -670,7 +619,7 @@ int main() {
             if (rot) prev_rot = rot;
             else prev_rot = rot_ccw;
 
-            // Soft drop: faster tick while held
+            // Soft drop
             bool sdrop = btn_down(PIN_SDROP);
             if (sdrop) {
                 if (absolute_time_diff_us(last_softdrop, get_absolute_time()) >= (int64_t)SOFT_DROP_MS*10) {
@@ -681,7 +630,6 @@ int main() {
                         was_grounded = false;
                         score += 1; // small soft-drop point
                     } else {
-                        // same as gravity: start/continue lock delay
                         if (!was_grounded) {
                             was_grounded = true;
                             grounded_time = get_absolute_time();
@@ -691,14 +639,11 @@ int main() {
                     }
                 }
             }
-
-            // Hard drop: edge
+            // delay for hard drop, to prevent hard dropping many pieces accidently
             static bool prev_hard = false;
             bool hdrop = btn_down(PIN_HDROP);
             if (hdrop && !prev_hard) {
-                // drop to ghost
                 Piece g = ghost_of(cur);
-                // add points per cell dropped
                 int dy = g.y - cur.y;
                 if (dy > 0) score += 2*dy;
                 cur = g;
@@ -706,7 +651,6 @@ int main() {
             }
             prev_hard = hdrop;
 
-            // Gravity
             int fall_ms = gravity_interval_ms();
             if (absolute_time_diff_us(last_fall, get_absolute_time()) >= (int64_t)fall_ms*1000) {
                 last_fall = get_absolute_time();
