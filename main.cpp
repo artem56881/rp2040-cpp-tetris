@@ -698,10 +698,6 @@ int main() {
                 tick_fall();
             }
         }
-        else { //pause case
-            ST7735_DrawRectFill(80-10, 64-16, 5, 20, ST7735_BLACK);
-            ST7735_DrawRectFill(80, 64-16, 5, 20, ST7735_BLACK);
-        }
         
         // Render
         // ST7735_DrawImage(0, 0, 160, 128, cat_farmer);
@@ -711,6 +707,14 @@ int main() {
         draw_piece(cur);
         draw_holded(holded);
         draw_queue();
+
+        if (paused) { //pause case
+            ST7735_DrawRectFill(80-10, 64-16, 5, 20, ST7735_BLACK);
+            ST7735_DrawRectFill(80, 64-16, 5, 20, ST7735_BLACK);
+
+            ST7735_DrawRect(79-10, 63-16, 7, 22, ST7735_WHITE);
+            ST7735_DrawRect(79, 63-16, 7, 22, ST7735_WHITE);
+        }
         ST7735_Update();
 
     }
