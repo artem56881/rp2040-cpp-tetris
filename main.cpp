@@ -17,14 +17,15 @@
 #define PIN_ROT    13
 #define PIN_SDROP  12
 #define PIN_HDROP  17
-#define PIN_PAUSE  15
+#define PIN_PAUSE  16
 #define PIN_ROT_CCW  11
+#define PIN_HOLD 15
 
 #define DAS_MS 142
 #define ARR_MS 1
 
 #define PIECE_COLOR ST7735_WHITE
-#define FIELD_COLOR ST7735_YELLOW
+#define FIELD_COLOR ST7735_WHITE
 
 
 static void btn_init(int pin){
@@ -34,7 +35,7 @@ static void btn_init(int pin){
 }
 
 std::map<int, uint16_t> number_to_color = {
-    {0, 0x1F << 11 | 0x3F << 5 | 0x1F},
+    {0, 0x1FA5},
     {1, 0xD5a9},
     {2, 0xaa54},
     {3, 0x8df4},
@@ -244,24 +245,35 @@ static void ensure_next_queue(int n) {
 // wall kicks
 static const int8_t SRS_JLSTZ[4][5][2] = {
     // 0->1
-    { { 0, 0}, {-1, 0}, {-1,+1}, { 0,-2}, {-1,-2} },
+    { { 0, 0}, {-1, 0}, {-1, -1}, { 0, 2}, {-1, 2} },
     // 1->2
-    { { 0, 0}, {+1, 0}, {+1,-1}, { 0,+2}, {+1,+2} },
-    // 2->3
     { { 0, 0}, {+1, 0}, {+1,+1}, { 0,-2}, {+1,-2} },
+    // 2->3
+    { { 0, 0}, {+1, 0}, {+1,-1}, { 0,+2}, {+1,+2} },
     // 3->0
-    { { 0, 0}, {-1, 0}, {-1,-1}, { 0,+2}, {-1,+2} }
+    { { 0, 0}, {-1, 0}, {-1,+1}, { 0,-2}, {-1,-2} }
 };
+
+// static const int8_t SRS_JLSTZ[4][5][2] = {
+//     // 0->1
+//     { { 0, -5}, { 0, -5}, { 0, -5}, { 0, -5}, { 0, -5} },
+//     // 1->2
+//     { { 0, -5}, { 0, -5}, { 0, -5}, { 0, -5}, { 0, -5} },
+//     // 2->3
+//     { { 0, -5}, { 0, -5}, { 0, -5}, { 0, -5}, { 0, -5} },
+//     // 3->0
+//     { { 0, -5}, { 0, -5}, { 0, -5}, { 0, -5}, { 0, -5} },
+// };
 
 static const int8_t SRS_I[4][5][2] = {
     // 0->1
-    { { 0, 0}, {-2, 0}, {+1, 0}, {-2,-1}, {+1,+2} },
+    { { 0, 0}, {-2, 0}, {+1, 0}, {-2,+1}, {+1,-2} },
     // 1->2
-    { { 0, 0}, {-1, 0}, {+2, 0}, {-1,+2}, {+2,-1} },
+    { { 0, 0}, {-1, 0}, {+2, 0}, {-1,-2}, {+2,+1} },
     // 2->3
-    { { 0, 0}, {+2, 0}, {-1, 0}, {+2,+1}, {-1,-2} },
+    { { 0, 0}, {-2, 0}, {-1, 0}, {+2,-1}, {-1,+2} },
     // 3->0
-    { { 0, 0}, {+1, 0}, {-2, 0}, {+1,-2}, {-2,+1} }
+    { { 0, 0}, {+1, 0}, {-2, 0}, {+1,+2}, {-2,-1} }
 };
 
 static const int8_t SRS_O[4][1][2] = {
@@ -306,12 +318,7 @@ static bool try_rotate_srs(Piece &pc, int dir) {
     Piece test = pc; test.r = to;
 
     if (pc.t == O) {
-        for (int i=0;i<1;i++) {
-            int dx = SRS_O[from][i][0], dy = SRS_O[from][i][1];
-            test.x = pc.x + dx; test.y = pc.y + dy;
-            if (can_place(test)) { pc = test; return true; }
-        }
-        return false;
+        return true;
     }
     const int8_t (*tab)[5][2] = (pc.t == I) ? SRS_I : SRS_JLSTZ;
     int idx = from;
@@ -355,8 +362,10 @@ static int clear_lines() {
     }
     return cleared;
 }
+bool was_holded_this_turn = false;
 
 static void new_piece_from_queue() {
+    was_holded_this_turn = false;
     ensure_next_queue(7);
     cur.t = next_queue.front();
     next_queue.erase(next_queue.begin());
@@ -368,7 +377,8 @@ static void new_piece_from_queue() {
     for (uint8_t i = 0; i < COLS; i++){
         if (board[0][i]) {
             memset(board, 0, sizeof(board));
-            score = 0; lines_cleared = 0; level = 1; next_queue.clear(); ensure_next_queue(7);
+            score = 0; lines_cleared = 0; level = 1;
+            next_queue.clear(); ensure_next_queue(7);
             ST7735_FillScreen(ST7735_BLACK);
             break;
         }
@@ -396,6 +406,17 @@ static Piece ghost_of(const Piece& p) {
         if (can_place(n)) g = n; else break;
     }
     return g;
+}
+
+static void draw_holded_cell(int c, int r, int piece_type) {
+    int x = FIELD_X + c * CELL_W;
+    int y = FIELD_Y + r * CELL_H;
+    int w = CELL_W - 1;
+    int h = CELL_H - 1;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (was_holded_this_turn)ST7735_DrawRectFill(x, y, w + 1, h + 1, ST7735_BLACK);
+    else ST7735_DrawRectFill(x, y, w + 1, h + 1, number_to_color[piece_type]);
 }
 
 static void draw_cell(int c, int r, int piece_type) {
@@ -448,6 +469,19 @@ static void draw_piece(const Piece& p) {
                 if (r>=0) draw_cell(c, r, p.t); 
             }
 }
+
+static void draw_holded(const Piece& p) {
+    if (p.t == -1) {return;}
+    const uint8_t* sh = TETROMINOES[p.t][0]; // 0 rotation
+    for (int yy=0; yy<4; yy++)
+        for (int xx=0; xx<4; xx++)
+            if (sh[yy*4 + xx]) {
+                int r = 3 + yy; // out of board coordinates
+                int c = 20 + xx; // out of board coordinates
+                if (r>=0) draw_holded_cell(c, r, p.t); 
+            }
+}
+
 
 static void draw_ghost(const Piece& p) {
     Piece g = ghost_of(p);
@@ -542,7 +576,7 @@ static void reset_lock_if_grounded_changed(bool moved_or_rotated) {
 }
 
 int main() {
-    set_sys_clock_khz(100000, true);
+    // set_sys_clock_khz(100000, true);
     holded.t = -1;
     stdio_init_all();
 
@@ -554,6 +588,7 @@ int main() {
     btn_init(PIN_SDROP);
     btn_init(PIN_HDROP);
     btn_init(PIN_PAUSE);
+    btn_init(PIN_HOLD);
     
     ButtonHandler btn_L(PIN_LEFT, move_left);
     ButtonHandler btn_R(PIN_RIGHT, move_right);
@@ -569,6 +604,8 @@ int main() {
     last_softdrop = get_absolute_time();
 
     while (true) {
+        ST7735_DrawRectFill(0, 0, 160, 128, ST7735_BLACK);
+
         update_fps();
         static bool prev_pause = false;
         bool p_pause = btn_down(PIN_PAUSE);
@@ -579,6 +616,7 @@ int main() {
             btn_R.update();
             btn_L.update();
             static bool prev_rot = false;
+
             bool rot = btn_down(PIN_ROT);
             bool rot_ccw = btn_down(PIN_ROT_CCW);
             if ((rot_ccw | rot) && !prev_rot) {
@@ -592,8 +630,27 @@ int main() {
                     cur = before;
                 }
             }
+
             if (rot) prev_rot = rot;
             else prev_rot = rot_ccw;
+
+            bool press_hold = btn_down(PIN_HOLD);
+            
+            if (press_hold && !was_holded_this_turn) {
+                was_holded_this_turn = true;
+
+                if (holded.t == -1) {
+                    holded = cur;
+                    new_piece_from_queue();
+                }
+                else {
+                    Piece swap = cur;
+                    cur = holded;
+                    cur.x = (COLS/2) - 2;
+                    cur.y = 0;
+                    holded = swap;
+                    }
+            }
 
             bool sdrop = btn_down(PIN_SDROP);
             if (sdrop) {
@@ -608,9 +665,9 @@ int main() {
                         if (!was_grounded) {
                             was_grounded = true;
                             grounded_time = get_absolute_time();
-                        } else if (absolute_time_diff_us(grounded_time, get_absolute_time()) >= (int64_t)LOCK_DELAY_MS*10) {
-                            on_piece_locked();
-                        }
+                        } //else if (absolute_time_diff_us(grounded_time, get_absolute_time()) >= (int64_t)LOCK_DELAY_MS*10) {
+                        //     on_piece_locked();
+                        // }
                     }
                 }
             }
@@ -627,18 +684,23 @@ int main() {
             prev_hard = hdrop;
 
             int fall_ms = gravity_interval_ms();
-            if (absolute_time_diff_us(last_fall, get_absolute_time()) >= (int64_t)fall_ms*1000) {
+            if (absolute_time_diff_us(last_fall, get_absolute_time()) >= (int64_t)fall_ms * 1000) {
                 last_fall = get_absolute_time();
                 tick_fall();
             }
         }
+        else { //pause case
+            ST7735_DrawRectFill(80-10, 64-16, 5, 20, ST7735_BLACK);
+            ST7735_DrawRectFill(80, 64-16, 5, 20, ST7735_BLACK);
+        }
         
         // Render
-        ST7735_DrawImage(0, 0, 160, 128, cat_farmer);
+        // ST7735_DrawImage(0, 0, 160, 128, cat_farmer);
         draw_field_outline();
         draw_board();
         draw_ghost(cur);
         draw_piece(cur);
+        draw_holded(holded);
         draw_queue();
         ST7735_Update();
 
