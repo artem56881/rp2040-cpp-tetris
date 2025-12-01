@@ -415,7 +415,7 @@ static void draw_holded_cell(int c, int r, int piece_type) {
     int h = CELL_H - 1;
     if (w < 1) w = 1;
     if (h < 1) h = 1;
-    if (was_holded_this_turn)ST7735_DrawRectFill(x, y, w + 1, h + 1, ST7735_BLACK);
+    if (was_holded_this_turn)ST7735_DrawRectFill(x, y, w + 1, h + 1, 0x73ae);
     else ST7735_DrawRectFill(x, y, w + 1, h + 1, number_to_color[piece_type]);
 }
 
