@@ -365,7 +365,6 @@ static int clear_lines() {
 bool was_holded_this_turn = false;
 
 static void new_piece_from_queue() {
-    was_holded_this_turn = false;
     ensure_next_queue(7);
     cur.t = next_queue.front();
     next_queue.erase(next_queue.begin());
@@ -538,6 +537,7 @@ static void move_lr(int dir){
 }
 
 static void on_piece_locked() {
+    was_holded_this_turn = false;
     lock_piece(cur);
     int cl = clear_lines();
     if (cl) {
@@ -649,7 +649,12 @@ int main() {
 
                 if (holded.t == -1) {
                     holded = cur;
+
                     new_piece_from_queue();
+
+                    cur.x = (COLS/2) - 2;
+                    cur.y = 0;
+                    cur.r = 0;
                 }
                 else {
                     Piece swap = cur;
