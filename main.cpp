@@ -35,13 +35,13 @@ static void btn_init(int pin){
 }
 
 std::map<int, uint16_t> number_to_color = {
-    {0, 0x1FA5},
+    {0, 0x5ffe},
     {1, 0xD5a9},
     {2, 0xaa54},
-    {3, 0x8df4},
-    {4, 0x85A6},
-    {5, 0xB1C8},
-    {6, 0x51F4},
+    {3, 0x85a6},
+    {4, 0xfa08},
+    {5, 0x4a7f},
+    {6, 0xfe67},
 };
 
 class ButtonHandler {
@@ -477,7 +477,7 @@ static void draw_holded(const Piece& p) {
         for (int xx=0; xx<4; xx++)
             if (sh[yy*4 + xx]) {
                 int r = 3 + yy; // out of board coordinates
-                int c = 20 + xx; // out of board coordinates
+                int c = 16 + xx; // out of board coordinates
                 if (r>=0) draw_holded_cell(c, r, p.t); 
             }
 }
@@ -582,7 +582,6 @@ int main() {
 
     ST7735_Init();
     ST7735_FillScreen(ST7735_BLACK);
-    
     btn_init(PIN_ROT);
     btn_init(PIN_ROT_CCW);
     btn_init(PIN_SDROP);
@@ -604,7 +603,16 @@ int main() {
     last_softdrop = get_absolute_time();
 
     while (true) {
-        ST7735_DrawRectFill(0, 0, 160, 128, ST7735_BLACK);
+        ST7735_FillScreen(ST7735_BLACK);
+
+        char level_string[20];
+        snprintf(level_string, sizeof(level_string), "%d", level);
+        
+        char fps_string[20];
+        snprintf(fps_string, sizeof(fps_string), "%d", fps_value);
+
+        ST7735_DrawString(100, 45, level_string, Font_11x18, ST7735_WHITE);
+        ST7735_DrawString(93, 68, fps_string, Font_11x18, ST7735_GREEN);
 
         update_fps();
         static bool prev_pause = false;
@@ -648,6 +656,7 @@ int main() {
                     cur = holded;
                     cur.x = (COLS/2) - 2;
                     cur.y = 0;
+                    cur.r = 0;
                     holded = swap;
                     }
             }
