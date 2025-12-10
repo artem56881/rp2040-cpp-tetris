@@ -13,7 +13,7 @@ modified to use a frameebuffer instead of sending data after each draw
     ```
 
 2.  **Open in VSCode**\
-    Import project into vscode using pico vscode extention.
+    Import project into vscode using Raspberry Pi Pico vscode extention.
 
 3.  **Compile the project**\
     Press **Compile** in the bottom-right.
