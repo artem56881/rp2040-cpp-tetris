@@ -4,7 +4,7 @@ tetris game for a rp2040 and a st7735 128x160 spi tft display st7735
 https://gitverse.ru/gppsoft/ST7735_RP2040_Driver
 modified to use a frameebuffer instead of sending data after each draw
 
-## Installation Guide
+## Building Guide
 
 1.  **Clone the repository**
 
@@ -27,3 +27,5 @@ modified to use a frameebuffer instead of sending data after each draw
         ./build/ssd1306_i2c.uf2
 
     into the newly appeared flash drive.
+
+Or use pre-build uf2 if dont want to modify.
